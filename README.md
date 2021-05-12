@@ -1,14 +1,11 @@
-# Documentable
+# Documentable V3
 
 ## Important
 
 ### Changes
 
-- Release v2.x
-  Version `2.x` comes with a change of architecture. The `DocumentRel` class was merged with  `Document`
-  A migration is provided to update Document from DocumentRel and get rid of the rel table.
 - Release v3.x
-  refer to [README.V3.md](README.V3.md)
+  Now Documentable is setup as a component. The params logic moves to the component and the plugins looks automatically for an `aws` component. If not present, it will use FS.
 
 
 
@@ -29,11 +26,6 @@ Add this repository to your composer.json file
 ```
 
 Add the package to the require list
-```
-"pixium/yii2-documentable": "2.0"
-```
-
-or, for the v3 (wip)
 
 ```
 "pixium/yii2-documentable": "dev-master_v3"
@@ -41,7 +33,7 @@ or, for the v3 (wip)
 
 
 
-## Migrations 
+## Migrations
 
 Add to `config/console.php` (Yii2 basic)  or `console/main.php` (Yii2 advanced)
 
@@ -71,8 +63,6 @@ on Yii Basic:
 ./yii migrate/up -p vendor/pixium/yii2-documentable/migrations
 ```
 
-
-
 ### You already have a `document` table in your stack!
 
 > Available only with v3
@@ -92,7 +82,7 @@ on Yii Basic:
 
 ### With AWS S3 access
 
-The Documentable component now includes the s3 bucket handler directly. To use localstack set your component like this:
+The Documentable component now includes the s3 bucket handler directly. To use **localstack** set your component like this:
 
 ```php
 'documentable' => [
@@ -139,29 +129,55 @@ no bucket? You want to put it all on a FS volume?
    'documentable' => [
      'class' => 'pixium\documentable\DocumentableComponent',
      // ALT CONFIG using FILESYSTEM
-     'fs_path' => '/tmp/uploads',
+     'fs_path' => '/tmp/uploads', 
+     'fs_path_tmp' => '/tmp',
    ],
  ]
  ```
+
+how to get yii to display your images easily:
+
+The simplest way is to create a symbolic link to map the base path to the real location
+
+```sh
+# Yii2 advanced
+ln -s /tmp/uploads ${YII_ROOT}/frontend/web/tmp
+# Yii2 basic
+ln -s /tmp/uploads ${YII_ROOT}/web/tmp
+```
+
+In this example `front.app.local/tmp/uploads/1.jpg` will be mapped to `/tmp/uploads/1.jpg`
 
 
 
 ### Image defaults
 
-set the image config params
+set the image config params, you can override them in the definition of the DocumentablBehaviour on a per Model, per Attribute basis.
 
 ```php
    'documentable' => [
      // ...
-     'image_config' => [
-        'upload_max_size' => 500, // max upload size for image in Kilobytes
-        'max_image_size' => 1920, // 1920x1920
-        // thumbnail params
-        'thumbnail_size' => ['width' => 200, 'height' => 200],
-        'thumbnail_background_color' => 'FFF', // or #AABBCC02 = RGBA
-        'thumbnail_background_alpha' => 0, // 0 to 100
-        'thumbnail_type' => 'png',       
-     ]
+     'image_options' => [ // can be overwritten at DocumentableBehaviour level
+       'max_image_size' => ... // max image size (height or width)' (default = 1920)
+       'quality' => ... // jpeg and webp quality (default = 85)
+       'jpeg_quality' => ... // jpeg quality uses quality if not set
+       'webp_quality' => ... // webp quality uses quality if not set
+       'png_compression_level' => ... /// png compression (default = 6)
+       'thumbnail' => [ // 
+         'default' => ... // url to default image (default = null)
+         'default_icon' => '<i class="fa fa-file-image-o fa-3x" aria-hidden="true"></i>'
+         'type' => 'png' // (default = null: same as parent image)
+         'square' => ... // (default = 150px)
+         'width' => ..., 'height' => ..., // take precedence on square
+         'crop' => true // set to fit the smaller edge in the defined box (default = false)
+         'background_color' => '000', // RGB 'FFF' = white
+         'background_alpha' => 0, // 0-100 (0 = transparent)
+         'quality' => ... // as above
+         'jpeg_quality' => ... // as above
+         'webp_quality' => ... // as above
+         'png_compression_level' => ... // as above
+       ]
+     ],
    ]
 ```
 
@@ -210,6 +226,7 @@ class MyClass extends \yii\db\ActiveRecord
             // 
             'mimetypes' => 'image/jpeg,image/png',
             'extensions' => ['png','jpg'],
+            ... // all image_options above can be added here 
           ]
         ]
       ],
@@ -225,14 +242,21 @@ To get a document attached to a model
 ```php
 $model = MyClass::findOne($index);
 
+# one image
 return ($doc1 = $model->getDocs('images')->one())
-  ? $doc1->getS3Url(true) // true for master, false for thumbnail
-  : Url::to('/img/feature_image_default.svg');
+  ? $doc1->getURI(true) // true for master, false for thumbnail
+  : Url::to('/img/feature_image_default.svg'); // default for no image
 
+# show them all
 foreach ($model->getDocs('images')->all() as $doc) {
-  echo Html::img($doc->getS3Url(true));
+  echo Html::img($doc->getURI(true));
 }
 
+# thumbnail shortcut (creates Html::img)
+return $model->getThumbnail('images', 
+	['class' => 'myclass'], 
+	'<i class="fa-something"></i>'
+);
 ```
 
  
@@ -246,6 +270,7 @@ foreach ($model->getDocs('images')->all() as $doc) {
 - `thumbnail` a boolean to specifiy if images given should have a thumbnail created.
 - `mimetypes` a csv of mimetypes (accepts meta image/*) to be accepted by the uplaoder widget.
 - `extensions` extensions to filter on top of mimetype. 
+- plus all `image_options` or `image_options.thumbnail` 
 
 
 
@@ -346,5 +371,4 @@ sudo yum install libzip-dev
 sudo service php-fpm restart
 sudo service nginx restart
 ```
-
 
