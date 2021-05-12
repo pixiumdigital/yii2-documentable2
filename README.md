@@ -1,10 +1,10 @@
-# Documentable V3
+# Documentable V2
 
 ## Important
 
 ### Changes
 
-- Release v3.x
+- Release v1.x
   Now Documentable is setup as a component. The params logic moves to the component and the plugins looks automatically for an `aws` component. If not present, it will use FS.
 
 
