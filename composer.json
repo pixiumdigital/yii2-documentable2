@@ -1,0 +1,29 @@
+{
+    "name": "pixium/yii2-documentable",
+    "description": "Upload and Attach documents to ActiveRecords",
+    "keywords": ["yii2", "document", "s3", "upload"],
+    "homepage": "https://github.com/pixiumdigital/yii2-documentable",
+    "type": "yii2-extension",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Lionel Aimerie",
+            "email": "lionel.aimerie@pixiumdigital.com",
+            "homepage": "http://pixiumdigital.com/"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "pixium\\documentable\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">=5.6.0",
+        "yiisoft/yii2": "~2.0.14",
+
+        "aws/aws-sdk-php": "~3.0",
+        "kartik-v/yii2-widget-fileinput": "@dev",
+        "yiisoft/yii2-imagine": "~2.2.0"
+    },
+    "minimum-stability": "dev"
+}
