@@ -8,6 +8,7 @@ use Exception;
 use yii\base\Component;
 use yii\helpers\FileHelper;
 use yii\helpers\Html;
+use yii\helpers\Url;
 use yii\helpers\VarDumper;
 
 /**
@@ -75,6 +76,9 @@ class DocumentableComponent extends Component
      *   disable_symlinks off;
      */
     public $fs_path = '/tmp/upload'; // path
+
+    /**  @var string $fs_base_url to use for the fs_path */
+    public $fs_base_url = 'upload'; // path
 
     /** @var string $fs_path path to temp upload folder */
     public $fs_path_tmp = '/tmp'; // path
@@ -361,7 +365,7 @@ class DocumentableComponent extends Component
             return (string) $request->getUri();
         }
         // USE FS
-        return "{$this->fs_path}/{$filename}";
+        return Url::to("{$this->fs_base_url}/{$filename}", true);
     }
 
     /**
