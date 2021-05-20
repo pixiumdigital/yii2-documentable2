@@ -1,471 +1,406 @@
 <?php
+namespace pixium\documentable;
 
-namespace pixium\documentable\models;
-
+use Aws\Exception\AwsException;
+use Aws\RetryMiddleware;
 use Aws\S3\S3Client;
 use Exception;
-use pixium\documentable\DocumentableComponent;
-use pixium\documentable\DocumentableException;
-use Yii;
-// imagine to create thumbs out of images
-use \yii\imagine\Image;
-use \yii\helpers\FileHelper;
-use \yii\db\ActiveRecord;
-use yii\web\UploadedFile;
-
-// use yii]imagine\
-
-//use Imagine\Image\ManipulatorInterface;
+use yii\base\Component;
+use yii\helpers\FileHelper;
+use yii\helpers\Html;
+use yii\helpers\Url;
+use yii\helpers\VarDumper;
 
 /**
- * This is the model class for table "document".
- *
- * @property int $id
- * @property string $title
- * @property string $url_thumb
- * @property string $url_master
- * @property int $created_at
- * @property int $created_by
- * @property int $updated_at
- * @property int $updated_by
- * @property int $copy_group
+ *   Add to config.components
+ *   'documentable' => [
+ *       'class' => 'pixium\documentable\DocumentableComponent',
+ *       'config' => [
+ *          'table_name' => 'document' // database table name used for docments
+ *          'aws_s3_config' => [ // if defined wil use s3 bucket instead of Filesystem
+ *               'bucket_name' => 'mybucket'
+ *               'version' => 'latest',
+ *               'region' => 'default',
+ *               'credentials' => [
+ *                   'key' => 'none',
+ *                   'secret' => 'none'
+ *               ],
+ *               // call docker defined localstack API endpoint for AWS services
+ *               // avoid lib curl issues on bucket-name.ENDPOINT resolution
+ *               // <https://github.com/localstack/localstack/issues/836>
+ *               'use_path_style_endpoint' => true,
+ *          ],
+ *          'fs_path' => '/tmp/assets', // path to save folder
+ *          'fs_path_tmp' => '/tmp', // path to temp save folder
+ *          'image_options' => [ // can be overwritten at DocumentableBehaviour level
+ *              'max_image_size' => max image size (height or width) (default = 1920)
+ *              'quality' => jpeg and webp quality (default = 85)
+ *              'jpeg_quality' => jpeg quality uses quality if not set,
+ *              'webp_quality' => webp quality uses quality if not set,
+ *              'png_compression_level' => png compression (default = 6), 1 quality - 9 small size
+ *              'thumbnail' => [
+ *                  'default' => null  url to default image
+ *                  'default_icon' => '<i class="fa fa-file-image-o fa-3x" aria-hidden="true"></i>'
+ *                  'type' => 'png' (default = null: copy from parent )
+ *                  'square' => 150 (default)
+ *                  'width' => 200, 'height' => 100,
+ *                  'crop' => true (crop will fit the smaller edge in the defined box)
+ *                  'background_color' => '000',
+ *                  'background_alpha' => 0,
+ *              ]
+ *          ],
+ *       ]
+ *   ],
  */
-class Document extends ActiveRecord
+class DocumentableComponent extends Component
 {
     const THUMBNAILABLE_MIMETYPES = ['image/jpg', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     const RESIZABLE_MIMETYPES = ['image/jpg', 'image/jpeg', 'image/png', 'image/webp'];
 
-    /**
-     * {@inheritdoc}
+    const PNG_COMPRESSION = 6;
+    const IMG_QUALITY = 85;
+
+    /** @var S3Client $s3 */
+    public $s3 = null; // 'common\services\AWSComponent'
+
+    /** @var string $s3_bucket_name */
+    public $aws_s3_config = null;
+
+    /** @var string $$s3_bucket_name name of the bucket */
+    public $s3_bucket_name = 'bucket';
+
+    /** @var string $fs_path path to upload folder
+     * the easiest way to reach your docs is to create a simlink in the {frontend|backend}/web folder:
+     *   ln -s /var/tmp ./frontend/web/tmp
+     * and enable simlink navigation in Nginx:
+     *   disable_symlinks off;
      */
-    public static function tableName()
+    public $fs_path = '/tmp/upload'; // path
+
+    /** url to access $fs_path */
+    public $fs_base_url = 'upload'; // path to get to the doc
+
+    /** @var string $fs_path path to temp upload folder */
+    public $fs_path_tmp = '/tmp'; // path
+
+    /** @var string $table_name document table name */
+    public $table_name = 'document';
+
+    /** @var HasherInterface $hasher */
+    private $hasher = null;
+    public $hasher_class_name = 'pixium\documentable\models\Hasher';
+
+    // TODO:
+    /**
+     * image options []
+     *      max_image_size      default 1920
+     *
+     * ]
+     */
+    public $image_options = [];
+
+    // unadulterated config, overwritten by reflection
+    public $config = [
+    ];
+
+    public function __construct($config = [])
     {
-        return \Yii::$app->documentable->table_name ?? 'document';
+        // ... initialization before configuration is applied
+        // use reflection
+        // will map $config keys to attributes
+        // e.g. 'version' => 1      mapped to $this->version
+        parent::__construct($config);
     }
 
     /**
-     * {@inheritdoc}
+     * @param string $path to test
+     * @param string $label for the path (upload, upload tmp...)
+     * @return string path validated
+     * @throws Exception if path is not found, not a dir or not writable
      */
-    public function behaviors()
+    private function validateFS($path, $label)
     {
-        return [
-            ['class' => \yii\behaviors\TimestampBehavior::class],
-            ['class' => \yii\behaviors\BlameableBehavior::class],
-        ];
+        $path = \Yii::getAlias($path);
+        if (!is_dir($path)) {
+            throw new Exception("Documentable: '{$path}' {$label} folder not found");
+        }
+        if (!is_writable($path)) {
+            throw new Exception("Documentable: '{$path}' {$label} temp upload folder not writable");
+        }
+        return $path;
     }
 
     /**
-     * {@inheritdoc}
+     * @return bool true: if the component is set with S3
      */
-    public function rules()
+    public function getUsesS3()
     {
-        return [
-            [['title', 'url_master', 'rel_table', 'rel_id'], 'required'],
-            [['size', 'rank', 'rel_id', 'copy_group', 'created_at', 'created_by', 'updated_at', 'updated_by'], 'integer'],
-            [['rel_table', 'rel_type_tag'], 'string'],
-            [['title', 'url_master', 'url_thumb'], 'string', 'max' => 255],
-        ];
+        return null !== $this->s3;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function attributeLabels()
+    public function init()
     {
-        return [
-            'id' => 'ID',
-            'rel_id' => 'Rel ID',
-            'rel_table' => 'Rel Type (ID)',
-            'rel_type_tag' => 'Rel Type Tag (Type ID)',
-            'rank' => 'Rank',
-            'title' => 'Title',
-            'url_thumb' => 'Url Thumb',
-            'url_master' => 'Url Original',
-            'size' => 'Size',
-            'created_at' => 'Created At',
-            'created_by' => 'Created By',
-            'updated_at' => 'Updated At',
-            'updated_by' => 'Updated By',
-        ];
-    }
+        parent::init();
 
-    //=== ACCESSORS
-    // GET model linked to a document by
-    /**
-     * @return string classna
-     */
-    public function getRelClassName()
-    {
-        $tablesplit = array_map('ucfirst', explode('_', $this->rel_table));
-        $classname = implode('', $tablesplit);
-        return "\\app\\models\\${classname}";
-    }
+        // dump($this);
+        // die;
 
-    /**
-     * @return \yii\db\ActiveQuery
-     */
-    public function getRelModel()
-    {
-        // return object
-        return $this->hasOne($this->relClassName, ['id' => 'rel_id']);
-    }
-
-    //=== EVENTS
-    /**
-     * before save
-     * set the rank to the current number of of rels in this group
-     * @inheritdoc
-     */
-    public function beforeSave($insert)
-    {
-        if (parent::beforeSave($insert)) {
-            // set the rank (in insert case)
-            if ($insert) {
-                $this->rank = self::find()->where([
-                    'rel_table' => $this->rel_table,
-                    'rel_id' => $this->rel_id,
-                ])->andFilterWhere([
-                    'rel_type_tag' => $this->rel_type_tag
-                ])->count();
+        if (null !== $this->aws_s3_config) {
+            if ($name = $this->aws_s3_config['bucket_name'] ?? false) {
+                $this->s3_bucket_name = $name;
+                // remove bucket name from the config before passing it to S3Client
+                unset($this->aws_s3_config['bucket_name']);
             }
-            return true;
+            // create bucket handler
+            $this->s3 = new \Aws\S3\S3Client($this->aws_s3_config);
+
+            // validate bucket existence
+            if (!$this->s3->doesBucketExist($this->s3_bucket_name)) {
+                throw new Exception("Documentable: S3 bucket name '{$this->s3_bucket_name}' not found");
+            }
+        } else {
+            // use FS - validate file storage path
+            $this->fs_path = $this->validateFS($this->fs_path, 'upload');
         }
-        return false;
+
+        // dump(['config' => $this->config, 'a' => 'b']);
+        // die;
+        // set hasher
+        $this->hasher = new $this->hasher_class_name();
+
+        //  validate temp folder
+        $this->fs_path_tmp = $this->validateFS($this->fs_path_tmp, 'temporary upload');
     }
 
     /**
-     * delete
-     * proper delete also removes ressources from S3
+     * rotate, resize and recompress file if an image and can be processed
+     * @param string $path
+     * @param string $mimetype
+     * @return bool true if processed
      */
-    public function delete()
+    public function processImageFile($path, $mimetype, $imageOptions = [])
     {
-        // update rank
-        if ($this->rank !== null) {
-            // decrease all ranks higher than the current one by 1
-            $this->moveFromRankTo($this->rank);
-        }
-        // if a copy, reduce the number of copies
-        $copyNb = (null == $this->copy_group) ? 1 : self::find()->where(['copy_group' => $this->copy_group])->count();
-        switch ($copyNb) {
-        case 2: // remove last copy of original
-            $this->updateAll(['copy_group' => null], ['copy_group' => $this->copy_group]);
-            break;
-        case 1: // removing original (and attached files)
-            /** @var DocumentableComponent $docsvc */
-            $docsvc = \Yii::$app->documentable;
-            // delete the thumbnail if available
-            if ($this->url_thumb
-            && ($this->url_thumb != $this->url_master)) {
-                $docsvc->deleteFile($this->url_thumb);
-            }
-
-            $docsvc->deleteFile($this->url_master);
-            break;
-        default:
-        }
-
-        // remove DB record
-        return parent::delete();
-    }
-
-    //=== SPECIAL
-    /**
-     * move from rank to
-     * move from rank iFrom to iTo (target)
-     * C:max O(2)
-     * @param int $iFrom rank to move from
-     * @param int $iTo rank to move to (if not specified move down rank)
-     */
-    public function moveFromRankTo($iFrom, $iTo = null)
-    {
-        // 0 1 2 3 4 5 6 7
-        // 0 2[1]3...       2 moved from 2 to 1     -> [ +1 ] for 1 to 2, then set 1
-        //   ^
-        // 3[0 1 2]4...     3 moved from 3 to 0     -> [ +1 ] for 0 to 3, then set 0
-        // ^
-        // 0[2 3 4]1 5      1 moved to 4            -> [ -1 ]
-        //         ^
-        // 0 1[2 3 4 5...]  1 deleted (no iTo)      -> [ -1 ]
-        //   ^
-        $iTarget = $iTo; // save target from ordering
-        $op = '-';
-        if (($iTo !== null) && ($iFrom > $iTo)) {
-            // ensure iFrom < iTo always
-            //swap($iFrom, $iTo);
-            $iTmp = $iFrom;
-            $iFrom = $iTo;
-            $iTo = $iTmp;
-            $op = '+';
-        }
-        // base query
-        $paramsBound = [
-            'rel_table' => $this->rel_table,
-            'rel_id' => $this->rel_id,
-            'rank_from' => $iFrom
-        ];
-        $tn = self::tableName();
-        // guarantee we stay under 0
-        $sql = "UPDATE `{$tn}` SET `rank`=GREATEST(0, `rank`{$op}1)"
-            .' WHERE `rel_table`=:rel_table AND `rel_id`=:rel_id'
-            .' AND `rank` IS NOT NULL AND `rank`>=:rank_from';
-        // extra filters
-        if ($iTo !== null) {
-            // add filter to rank iTo  (<= note!)
-            $paramsBound['rank_to'] = $iTo;
-            $sql .= ' AND `rank`<=:rank_to';
-        }
-        if ($this->rel_type_tag != null) {
-            // to do it yii style and protect params
-            $paramsBound['rel_type_tag'] = $this->rel_type_tag;
-            $sql .= ' AND `rel_type_tag`=:rel_type_tag';
-        }
-        \Yii::$app->db->createCommand($sql, $paramsBound)->execute();
-
-        // if a target is specified, update the rank of the target
-        if ($iTarget !== null) {
-            // finally set rank for the moved one
-            $this->rank = $iTarget;
-
-            if ($this->save(false, ['rank'])) {
-                return true;
-            }
-            $this->addError('rank', "Can't assign rank to document:{$this->id}");
+        // if Imagine is not included, don't resize
+        if (!class_exists('\yii\imagine\Image')) {
             return false;
         }
-    }
 
-    //=== AWS S3
-    /**
-     * get presigned url valid for the next 10 minutes
-     * @param bool $returnMaster true for master | false for thumbnail
-     * @return ???
-     */
-    public function getURI($returnMaster = true)
-    {
-        $filename = $returnMaster ? $this->url_master : $this->url_thumb;
-        if ($filename == null) {
-            return null;
+        // TODO: test if imagine available
+        if (!in_array($mimetype, self::RESIZABLE_MIMETYPES)) {
+            return false;
         }
-        /** @var S3Client $s3 */
-        /** @var DocumentableComponent $docsvc */
-        $docsvc = \Yii::$app->documentable;
-        return $docsvc->getURI($filename);
-    }
 
-    /**
-     * getObject
-     * returns the complete object
-     * @param bool $returnMaster true for master | false for thumbnail
-     */
-    public function getObject($returnMaster = true)
-    {
-        $filename = $returnMaster ? $this->url_master : $this->url_thumb;
-        if ($filename == null) {
-            return null;
+        $options = array_merge_recursive($this->image_options, $imageOptions);
+
+        // resize
+        $max = $options['max_image_size'] ?? 1920;
+        $image = \yii\imagine\Image::resize($path, $max, $max);
+
+        // re-orientate
+        try {
+            $exif = exif_read_data($path);
+            // handle EXIF rotation
+            switch ($exif['Orientation'] ?? 0) {
+            case 3: $image->rotate(180); break;
+            case 6: $image->rotate(90); break;
+            case 8: $image->rotate(-90); break;
+            default: // don't rotate
+            }
+        } catch (Exception $e) {
+            // simply don't reorientate
         }
-        /** @var S3Client $s3 */
-        /** @var DocumentableComponent $docsvc */
-        $docsvc = \Yii::$app->documentable;
-        return $docsvc->getObject($filename, $this->mimetype);
+
+        // save image to $filePath
+        // recompress
+        $image->save($path, $this->_getQuality($imageOptions, false));
+        return true;
     }
 
     /**
-     * upload one file given by FS path to s3
-     * also generates thumbnail if possible and required
-     * (add: encrypt the file)
-     * FS
-     * @param string filepath - location of file in FS
-     * @param string basename - filename, no path, no extension
-     * @param string extension - filename extension only
-     * @param string mimetype
-     * @param integer filesize
-     * DB
-     * @param integer relId id of model to link to
-     * @param string relType type of rel ('article')
-     * @param string relTag tag attached to the relationship
-     * Options
-     * @param Array options as key => value from DocumentableBehavior
+     * get quality for image processing
+     * @param Array $imageOptions to get the quality from
+     * @param bool $isForThumbnail
+     * @return Array Imagine rady
      */
-    private static function _uploadFile(
-        $filepath,
-        $mimetype,
-        $relId,
-        $relType,
-        $relTag,
-        $options
-    ) {
-        /** @var DocumentableComponent $docsvc */
-        $docsvc = \Yii::$app->documentable;
+    private function _getQuality($options, $isForThumbnail = false)
+    {
+        $options = array_merge_recursive($isForThumbnail ? ($this->image_options['thumbnail'] ?? []) : $this->image_options, $options);
+        $quality = $options['quality'] ?? self::IMG_QUALITY;
+        return [
+            'quality' => $quality,
+            'jpeg_quality' => $options['jpeg_quality'] ?? $quality,
+            'jpeg_quality' => $options['webp_quality'] ?? $quality,
+            'png_compression_level' => $options['png_compression_level'] ?? intval((100 - $quality) / 10),
+        ];
+    }
 
-        $path = \Yii::getAlias($filepath); // `/dir/file.ext`
+    /**
+     * rotate image then create a png thumbnail
+     * @param string $filepathIn
+     * @param string $filepathOut
+     * @param string $mimetype
+     * @return string|false filepath if processed
+     */
+    public function processImageThumbnail($filepath, $mimetype = null, $imageOptions = [])
+    {
+        $path = \Yii::getAlias($filepath);
+        if (null == $mimetype) {
+            $mimetype = FileHelper::getMimeType($path);
+        }
+
+        // if Imagine is not included, don't resize
+        if (!class_exists('\yii\imagine\Image')) {
+            return false;
+        }
+        // if the file is not an image or not a resizable one, exit
+        if (!in_array($mimetype, self::THUMBNAILABLE_MIMETYPES)) {
+            return false;
+        }
+
+        $options = array_merge_recursive($this->image_options, $imageOptions);
+        $thumbnailOptions = $options['thumbnail'] ?? [];
+
         $pathParts = pathinfo($path);
-        $basename = $pathParts['filename']; // `file`
-        $extension = $pathParts['extension']; // `ext`
-        $filename = $pathParts['basename']; // `file.ext`
+        $basename = $pathParts['filename'];
+        // extract thumbnail options
+        $extension = $thumbnailOptions['type'] ?? $pathParts['extension']; // use forced if given, else same as original
+        $wmax = $thumbnailOptions['width'] ?? $thumbnailOptions['square'] ?? 150;
+        $hmax = $thumbnailOptions['height'] ?? $wmax;
+        $crop = $thumbnailOptions['crop'] ?? false;
+        $bgColor = $thumbnailOptions['background_color'] ?? '000';
+        $bgAlpha = $thumbnailOptions['background_alpha'] ?? 0;
+        $thumbnailPath = "{$this->fs_path_tmp}/{$basename}.thumb.{$extension}";
 
+        // resize
+        \yii\imagine\Image::$thumbnailBackgroundColor = $bgColor;
+        \yii\imagine\Image::$thumbnailBackgroundAlpha = $bgAlpha;
+        \yii\imagine\Image::thumbnail(
+            $path,
+            $wmax,
+            $hmax,
+            //\Imagine\Image\ImageInterface::THUMBNAIL_OUTBOUND = crop
+            $crop ? \Imagine\Image\ImageInterface::THUMBNAIL_OUTBOUND : \Imagine\Image\ImageInterface::THUMBNAIL_INSET,
+        )->save($thumbnailPath, $this->_getQuality($imageOptions, true));
+        return $thumbnailPath;
+    }
+
+    /**
+     * saves file on FS or S3
+     * @param string $filepath src (path to file)
+     * @param string $mimetype
+     * @return string filename used
+     */
+    public function saveFile($path, $mimetype = null)
+    {
+        $filename = pathinfo($path, PATHINFO_BASENAME);
         $now = time();
         $s3prefix = substr(md5("{$filename}{$now}"), 0, 8).'-';
+        $s3filename = "{$s3prefix}{$filename}";
+        if (null !== $this->s3) {
+            // move it to the S3 bucket
+            $s3FileOptions = [
+                'Bucket' => $this->s3_bucket_name,
+                'Key' => $s3filename
+            ];
 
-        // MASTER: process image file (if it's an image)
-        $docsvc->processImageFile($path, $mimetype, $options);
-
-        $filesizeFinal = filesize($path);
-
-        $thumbnailFilenameFinal = null;
-
-        // THUMBNAIL: process/generate if it's a thumbnail-able image
-        if ($options['thumbnail'] ?? false) {
-            $thumbnailPath = $docsvc->processImageThumbnail($path, $mimetype, $options);
-            if (false !== $thumbnailPath) {
-                // upload to bucket / FS, remove temp file
-                $thumbnailFilenameFinal = $docsvc->saveFile($thumbnailPath, $mimetype);
-            }
+            $result = $this->s3->putObject(array_merge($s3FileOptions, [
+                'SourceFile' => $path,
+                // needed for SVGs
+                'ContentType' => $mimetype,
+                'Metadata' => [
+                    'version' => '1.0.0'
+                ]
+            ]));
+            // poll object until it is accessible
+            $this->s3->waitUntil('ObjectExists', $s3FileOptions);
+            // ERASE tmp thumbnail file
+            FileHelper::unlink($path);
+            return $s3filename;
         }
-
-        // save master file and remove temp files
-        $filenameFinal = $docsvc->saveFile($path, $mimetype);
-
-        if ('image/svg+xml' == $mimetype) {
-            // thumbnail and master are the same
-            $thumbnailFilenameFinal = $filenameFinal;
-        }
-
-        // Create `document`
-        $model = new Document([
-            'rel_table' => $relType,
-            'rel_id' => $relId,
-            'rel_type_tag' => $relTag,
-            'url_master' => $filenameFinal,
-            'url_thumb' => $thumbnailFilenameFinal, // AWS S3 key for thumbnail file
-            'title' => $filename,
-            'size' => $filesizeFinal, // in Bytes (save to be able to know how much data this user uses)
-        ]);
-        if (!$model->save() && ($errors = $model->errors)) {
-            // throw exception couldn't save document
-            $err = empty($errors) ? 'unknown reason' : $errors[0][0];
-            throw new yii\db\Exception("Couldn't Save `document` reason:{$err}");
-        }
-        // success, return document id
-        return $model;
+        // FS move
+        rename($path, "{$this->fs_path}/{$s3filename}");
+        return $s3filename;
     }
 
     /**
-     * uploads one file either from
-     * - an Http Request via UploadedFile
-     * - or for Console uploads directly
-     * uploads a File to a given model
-     * - handle zips
-     * @param UploadedFile|string $file (UploadeFile or path to file)
-     * @param ActiveRecord $model
-     * @param string $tag // relation_tag
-     * @param array $options
+     * delete file, if not found ignore
+     * @param string $filename target (e.g. cca3dfd5-lasagna5.jpg)
+     * @return bool true if deleted
      */
-    public static function uploadFileForModel($file, $model, $tag, $options = [])
+    public function deleteFile($filename)
     {
-        /** @var DocumentableComponent $docsvc */
-        $docsvc = \Yii::$app->documentable;
-
-        $path = null;
-        $mimetype = null;
-        if (is_string($file)) {
-            // filesystem direct copy
-            $filename = pathinfo($file, PATHINFO_BASENAME);
-            $path = "{$docsvc->fs_path_tmp}/{$filename}";
-            // make a copy of the file to upload to the temp folder
-            // so that the original doesn't get deleted after upload
-            copy($file, $path);
-            $mimetype = FileHelper::getMimeType($path);
-        } else {
-            // UploadedFile (Yii2 object)
-            $path = "{$docsvc->fs_path_tmp}/{$file->baseName}.{$file->extension}";
-            $mimetype = $file->type;
-            $file->saveAs($path); // guzzle the file
-        }
-
-        // do we unzip a zipped file?
-        $acceptedZipTypes = ['application/zip', 'application/x-zip-compressed', 'multipart/x-zip', 'application/x-compressed'];
-        $unzip = $options['unzip'] ?? false;
-        if ((false === $unzip) || !in_array($file->type, $acceptedZipTypes)) {
-            // simple single file
-            // not a zip
-            self::_uploadFile(
-                $path,
-                $mimetype,
-                $model->id,
-                $model->tableName(),
-                $tag,
-                $options
-            );
-            return;
-        }
-
-        // unzip and if unzip is an array, use the array to filter the mimetypes to extract
-        // if true extract all
-        $zip = new \ZipArchive();
-        $res = $zip->open($path);
-        // save files to process in order
-        if ($res === true) {
-            // Unzip the Archive.zip and upload it to s3
-            $zipBasePath = "{$docsvc->fs_path_tmp}/unzip";
-            $zip->extractTo($zipBasePath);
-            $unzipFiles = [];
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                // loop through the archive
-                $stat = $zip->statIndex($i);
-                $filepath = "{$zipBasePath}/{$stat['name']}"; // "setA/a.txt"
-                $filesize = $stat['size'];
-                $mimetype = mime_content_type($filepath); // text/plain
-                if (($filesize > 0)
-                && ((true === $unzip) || (is_array($unzip) && in_array($mimetype, $unzip)))
-                ) {
-                    $unzipFiles[$filepath] = $mimetype;
-                }
+        try {
+            if (null !== $this->s3) {
+                $cmd = $this->s3->deleteObject([
+                    'Bucket' => $this->s3_bucket_name,
+                    'Key' => $filename,
+                    // 'VersionId' => 'string',
+                ]);
+            } else {
+                //FS
+                $path = "{$this->fs_path}/{$filename}";
+                FileHelper::unlink($path);
             }
-            // now sort the files alphabetically
-            ksort($unzipFiles, SORT_ASC);
-            // and finally save them
-            foreach ($unzipFiles as $filepath => $mimetype) {
-                // Extractable file, (not directory)
-                self::_uploadFile(
-                    $filepath,
-                    $mimetype,
-                    $model->id,
-                    $model->tableName(),
-                    $tag,
-                    $options // options
-                );
-            }
-            // delete zip folder
-            FileHelper::removeDirectory($zipBasePath);
-            //rmdir($zipBasePath);
+        } catch (Exception $e) {
+            return false;
         }
-        // delete zip file
-        // as it won't be done after upload by _uploadFile
-        FileHelper::unlink($path);
+        return true;
     }
 
     /**
-     * copy to model
-     * this function allows copying to non-Documentable models, @see DocumentableBehavior::copyDocs()
-     * it only creates a new Document and specifies a copy_group for all Documents pointing to the same real file
-     * @param ActiveRecord $model
-     * @param String $tag name
+     * @param string $filename
+     * @return string URI to file
      */
-    public function copyToModel($model, $tag = null)
+    public function getURI($filename, $options = [])
     {
-        // if this is not a copied model, create a copy group
-        if (null == $this->copy_group) {
-            $this->copy_group = $this->id;
-            $this->save(false);
+        if (null !== $this->s3) {
+            $cmd = $this->s3->getCommand('GetObject', [
+                'Bucket' => $this->s3_bucket_name,
+                'Key' => $filename,
+            ]);
+
+            $request = $this->s3->createPresignedRequest($cmd, '+20 minutes');
+
+            // Get the actual presigned-url
+            return (string) $request->getUri();
         }
-        $newDoc = clone $this;
-        $newDoc->rel_type_tag = $tag ?? $this->rel_type_tag; // reuse original tag if not specified
-        $newDoc->rel_table = $model->tableName();
-        $newDoc->rel_id = $model->id;
-        $newDoc->id = null;
-        $newDoc->isNewRecord = true; // assign a new
-        $newDoc->copy_group = $this->copy_group; // copy the group
-        $newDoc->save(false);
-        return $newDoc;
+        // USE FS
+        return Url::to("{$this->fs_base_url}/{$filename}", true);
     }
-}//eo-class
+
+    /**
+     * @param string $filename
+     * @return mixed the file
+     */
+    public function getObject($filename, $mimetype, $options = [])
+    {
+        if (null !== $this->s3) {
+            //Creating a presigned URL
+            $result = $this->s3->getObject([
+                'Bucket' => $this->s3_bucket_name,
+                'Key' => ($filename),
+            ]);
+            // Display the object in the browser.
+            //header("Content-Type: {$result['ContentType']}");
+            return $result['Body'] ?? null;
+        }
+        // USE FS
+        return file_get_contents($filename);
+    }
+
+    /**
+     * return default thumbnail defined on component
+     * @return string html for default thumbnail
+     */
+    public function getThumbnailDefault($options = [])
+    {
+        $thumbnailOptions = $this->image_options['thumbnail'] ?? [];
+        $imgUrl = $thumbnailOptions['default'] ?? null;
+        if (null != $imgUrl) {
+            return Html::img($imgUrl, $options);
+        }
+        // go for icons
+        $icon = $thumbnailOptions['default_icon'] ?? '<i class="fa fa-file-image-o fa-3x" aria-hidden="true"></i>';
+        return Html::tag('div', $icon, $options);
+    }
+}

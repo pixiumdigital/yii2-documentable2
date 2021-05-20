@@ -165,7 +165,7 @@ class DocumentableComponent extends Component
         $this->hasher = new $this->hasher_class_name();
 
         //  validate temp folder
-        $this->fs_path = $this->validateFS($this->fs_path_tmp, 'temporary upload');
+        $this->fs_path_tmp = $this->validateFS($this->fs_path_tmp, 'temporary upload');
     }
 
     /**
