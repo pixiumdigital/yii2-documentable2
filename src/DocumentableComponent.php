@@ -111,16 +111,19 @@ class DocumentableComponent extends Component
     /**
      * @param string $path to test
      * @param string $label for the path (upload, upload tmp...)
+     * @return string path validated
      * @throws Exception if path is not found, not a dir or not writable
      */
     private function validateFS($path, $label)
     {
+        $path = \Yii::getAlias($path);
         if (!is_dir($path)) {
             throw new Exception("Documentable: '{$path}' {$label} folder not found");
         }
-        if (!is_writable($this->fs_path_tmp)) {
+        if (!is_writable($path)) {
             throw new Exception("Documentable: '{$path}' {$label} temp upload folder not writable");
         }
+        return $path;
     }
 
     /**
@@ -153,7 +156,7 @@ class DocumentableComponent extends Component
             }
         } else {
             // use FS - validate file storage path
-            $this->validateFS($this->fs_path, 'upload');
+            $this->fs_path = $this->validateFS($this->fs_path, 'upload');
         }
 
         // dump(['config' => $this->config, 'a' => 'b']);
@@ -162,7 +165,7 @@ class DocumentableComponent extends Component
         $this->hasher = new $this->hasher_class_name();
 
         //  validate temp folder
-        $this->validateFS($this->fs_path_tmp, 'temporary upload');
+        $this->fs_path = $this->validateFS($this->fs_path_tmp, 'temporary upload');
     }
 
     /**

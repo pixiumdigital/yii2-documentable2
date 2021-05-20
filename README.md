@@ -20,7 +20,7 @@ Add this repository to your composer.json file
         },
         {
             "type": "vcs",
-            "url": "https://github.com/pixiumdigital/yii2-documentable"
+            "url": "https://github.com/pixiumdigital/yii2-documentable2"
         }
     ],
 ```
