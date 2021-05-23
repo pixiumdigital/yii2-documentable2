@@ -145,7 +145,7 @@ class Document extends ActiveRecord
             $this->moveFromRankTo($this->rank);
         }
         // if a copy, reduce the number of copies
-        $copy_group = 1;
+        $copyNb = 1;
         if ($updateGroup) { // optimize deleting all docs by skipping updates and counts
             $copyNb = (null == $this->copy_group) ? 1 : self::find()->where(['copy_group' => $this->copy_group])->count();
         }
