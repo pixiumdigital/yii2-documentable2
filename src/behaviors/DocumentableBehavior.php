@@ -6,6 +6,7 @@ use \yii\db\ActiveRecord;
 use \yii\base\Behavior;
 use \pixium\documentable\models\Document;
 use yii\helpers\Html;
+use yii\helpers\VarDumper;
 use yii\web\UploadedFile;
 
 /**
@@ -210,7 +211,7 @@ class DocumentableBehavior extends Behavior
         $docs = $this->getDocs($prop)->all();
         foreach ($docs as $doc) {
             /** @var Document $doc */
-            $doc->delete();
+            $doc->delete(false); // skip group updates as we delete all
         }
     }
 
@@ -218,22 +219,41 @@ class DocumentableBehavior extends Behavior
      * uploadFile
      * @param string $prop
      * @param UploadedFile|string File or path to file
+     * @param array $options DocumentableBehaviour attribute options
      */
     public function uploadFile($prop, $fileOrPath, $options = [])
     {
         $model = $this->owner;
-        $options = array_merge_recursive($this->filter[$prop], $options);
+        $options = self::array_merge_recursive_unique($this->filter[$prop], $options);
         // DBG:
-        // print_r([
-        //     'dbg' => 'uploadFile',
-        //     'prop' => $prop,
-        //     'options' => $options,
-        // ]);
+        VarDumper::dump([
+            'dbg' => 'uploadFile',
+            'prop' => $prop,
+            'options' => $options,
+        ]);
         Document::uploadFileForModel(
             $fileOrPath,
             $model,
             $options['tag'] ?? $prop,
             $options
         );
+    }
+
+    //--- PRIVATE HELPERS
+    /**
+     * @return array with unique keys
+     */
+    private static function array_merge_recursive_unique($array1, $array2)
+    {
+        if (empty($array1)) {
+            return $array2;
+        } //optimize the base case
+        foreach ($array2 as $key => $value) {
+            if (is_array($value) && is_array(@$array1[$key])) {
+                $value = self::array_merge_recursive_unique($array1[$key], $value);
+            }
+            $array1[$key] = $value;
+        }
+        return $array1;
     }
 }

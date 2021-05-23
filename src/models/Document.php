@@ -137,7 +137,7 @@ class Document extends ActiveRecord
      * delete
      * proper delete also removes ressources from S3
      */
-    public function delete()
+    public function delete($updateGroup = true)
     {
         // update rank
         if ($this->rank !== null) {
@@ -145,7 +145,10 @@ class Document extends ActiveRecord
             $this->moveFromRankTo($this->rank);
         }
         // if a copy, reduce the number of copies
-        $copyNb = (null == $this->copy_group) ? 1 : self::find()->where(['copy_group' => $this->copy_group])->count();
+        $copy_group = 1;
+        if ($updateGroup) { // optimize deleting all docs by skipping updates and counts
+            $copyNb = (null == $this->copy_group) ? 1 : self::find()->where(['copy_group' => $this->copy_group])->count();
+        }
         switch ($copyNb) {
         case 2: // remove last copy of original
             $this->updateAll(['copy_group' => null], ['copy_group' => $this->copy_group]);
@@ -238,7 +241,7 @@ class Document extends ActiveRecord
     /**
      * get presigned url valid for the next 10 minutes
      * @param bool $returnMaster true for master | false for thumbnail
-     * @return ???
+     * @return string
      */
     public function getURI($returnMaster = true)
     {
@@ -263,7 +266,6 @@ class Document extends ActiveRecord
         if ($filename == null) {
             return null;
         }
-        /** @var S3Client $s3 */
         /** @var DocumentableComponent $docsvc */
         $docsvc = \Yii::$app->documentable;
         return $docsvc->getObject($filename, $this->mimetype);
