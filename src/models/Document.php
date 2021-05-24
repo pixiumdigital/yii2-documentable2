@@ -4,6 +4,7 @@ namespace pixium\documentable\models;
 
 use Aws\S3\S3Client;
 use Exception;
+use finfo;
 use pixium\documentable\DocumentableComponent;
 use pixium\documentable\DocumentableException;
 use Yii;
@@ -268,7 +269,8 @@ class Document extends ActiveRecord
         }
         /** @var DocumentableComponent $docsvc */
         $docsvc = \Yii::$app->documentable;
-        return $docsvc->getObject($filename, $this->mimetype);
+        // get mime_Type from buffer
+        return $docsvc->getObject($filename);
     }
 
     /**

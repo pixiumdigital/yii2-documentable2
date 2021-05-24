@@ -372,7 +372,7 @@ class DocumentableComponent extends Component
      * @param string $filename
      * @return mixed the file
      */
-    public function getObject($filename, $mimetype, $options = [])
+    public function getObject($filename, $options = [])
     {
         if (null !== $this->s3) {
             //Creating a presigned URL

@@ -5,6 +5,7 @@ use pixium\documentable\DocumentableException;
 use \yii\db\ActiveRecord;
 use \yii\base\Behavior;
 use \pixium\documentable\models\Document;
+use yii\helpers\ArrayHelper;
 use yii\helpers\Html;
 use yii\helpers\VarDumper;
 use yii\web\UploadedFile;
@@ -224,7 +225,7 @@ class DocumentableBehavior extends Behavior
     public function uploadFile($prop, $fileOrPath, $options = [])
     {
         $model = $this->owner;
-        $options = self::array_merge_recursive_unique($this->filter[$prop], $options);
+        $options = ArrayHelper::merge($this->filter[$prop], $options);
         // DBG:
         VarDumper::dump([
             'dbg' => 'uploadFile',
@@ -237,23 +238,5 @@ class DocumentableBehavior extends Behavior
             $options['tag'] ?? $prop,
             $options
         );
-    }
-
-    //--- PRIVATE HELPERS
-    /**
-     * @return array with unique keys
-     */
-    private static function array_merge_recursive_unique($array1, $array2)
-    {
-        if (empty($array1)) {
-            return $array2;
-        } //optimize the base case
-        foreach ($array2 as $key => $value) {
-            if (is_array($value) && is_array(@$array1[$key])) {
-                $value = self::array_merge_recursive_unique($array1[$key], $value);
-            }
-            $array1[$key] = $value;
-        }
-        return $array1;
     }
 }
