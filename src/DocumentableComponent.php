@@ -279,7 +279,7 @@ class DocumentableComponent extends Component
             $wmax,
             $hmax,
             //\Imagine\Image\ImageInterface::THUMBNAIL_OUTBOUND = crop
-            $crop ? \Imagine\Image\ImageInterface::THUMBNAIL_OUTBOUND : \Imagine\Image\ImageInterface::THUMBNAIL_INSET,
+            $crop ? \Imagine\Image\ImageInterface::THUMBNAIL_OUTBOUND : \Imagine\Image\ImageInterface::THUMBNAIL_INSET
         )->save($thumbnailPath, $this->_getQuality($imageOptions, true));
         return $thumbnailPath;
     }
