@@ -162,15 +162,16 @@ class DocumentableBehavior extends Behavior
      * @param string $prop property name
      * @param array $options html options for img tag
      * @param string $default tag generated if no image is available
+     * @param bool $asThumb
      */
-    public function getThumbnail($prop, $options = [], $default = null)
+    private function getFirstImage($prop, $options = [], $default = null, $asThumb = false)
     {
         $options['class'] = 'thumbnail '.($options['class'] ?? '');
         // return first thumbanil for the property
         if (null !== ($doc1 = $this->getDocs($prop)->one())) {
             /** @var Document doc1 */
             // get thumbnail url
-            if (null !== ($url = $doc1->getURI(false))) {
+            if (null !== ($url = $doc1->getURI(!$asThumb))) {
                 return Html::img($url, $options);
             }
         }
@@ -182,6 +183,28 @@ class DocumentableBehavior extends Behavior
         /** @var DocumentableComponent $docsvc */
         $docsvc = \Yii::$app->documentable;
         return $docsvc->getThumbnailDefault($options);
+    }
+
+    /**
+     * Helper: Provided as a quick way to retrieve the first image given as property
+     * @param string $prop property name
+     * @param array $options html options for img tag
+     * @param string $default tag generated if no image is available
+     */
+    public function getThumbnail($prop, $options = [], $default = null)
+    {
+        return $this->getFirstImage($prop, $options, $default, true);
+    }
+
+    /**
+     * Helper: Provided as a quick way to retrieve the first image given as property
+     * @param string $prop property name
+     * @param array $options html options for img tag
+     * @param string $default tag generated if no image is available
+     */
+    public function getImage($prop, $options = [], $default = null)
+    {
+        return $this->getFirstImage($prop, $options, $default, false);
     }
 
     /**
