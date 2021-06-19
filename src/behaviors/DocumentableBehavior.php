@@ -166,7 +166,6 @@ class DocumentableBehavior extends Behavior
      */
     private function getFirstImage($prop, $options = [], $default = null, $asThumb = false)
     {
-        $options['class'] = 'thumbnail '.($options['class'] ?? '');
         // return first thumbanil for the property
         if (null !== ($doc1 = $this->getDocs($prop)->one())) {
             /** @var Document doc1 */
