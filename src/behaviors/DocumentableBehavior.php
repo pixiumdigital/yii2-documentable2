@@ -249,11 +249,11 @@ class DocumentableBehavior extends Behavior
         $model = $this->owner;
         $options = ArrayHelper::merge($this->filter[$prop], $options);
         // DBG:
-        VarDumper::dump([
-            'dbg' => 'uploadFile',
-            'prop' => $prop,
-            'options' => $options,
-        ]);
+        // VarDumper::dump([
+        //     'dbg' => 'uploadFile',
+        //     'prop' => $prop,
+        //     'options' => $options,
+        // ]);
         Document::uploadFileForModel(
             $fileOrPath,
             $model,
