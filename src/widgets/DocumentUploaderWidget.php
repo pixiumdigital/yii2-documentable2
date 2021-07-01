@@ -4,6 +4,7 @@ namespace pixium\documentable\widgets;
 
 use Exception;
 use Yii;
+use yii\helpers\VarDumper;
 use yii\widgets\InputWidget;
 
 // use yii\helpers\Html;
@@ -22,6 +23,11 @@ class DocumentUploaderWidget extends InputWidget
      * e.g. User PROFILE_IMAGE Documnet, User RESUME_PDF Document...
      */
     public $relTypeTag = null;
+
+    /**
+     * theme 'fas' by default (see \kartik\file\FileInput)
+     */
+    public $theme = 'fa';
 
     /**
      * if defined, save reltype and uploads in a file
@@ -109,7 +115,7 @@ class DocumentUploaderWidget extends InputWidget
         $this->index = null;
 
         if (!$this->hasModel()) {
-            dump("no model given [{$this->attribute}]");
+            VarDumper::dump("no model given [{$this->attribute}]");
             return;
         }
         $model = $this->model;
@@ -184,6 +190,7 @@ class DocumentUploaderWidget extends InputWidget
                 'maxFileSize' => $maxFileSize, // Kb add to params
                 // delete
                 'deleteUrl' => \yii\helpers\Url::to(['document/delete']),
+                'theme' => $this->theme, 
             ]),
             // events
             'pluginEvents' => $this->pluginEvents
@@ -204,7 +211,7 @@ class DocumentUploaderWidget extends InputWidget
             // 'fieldConfig' => ['template' ]
             'template' => $this->template,
             'options' => ['class' => $formFieldClasses]])
-            ->widget(\kartik\file\FileInput::classname(), $options)
+            ->widget(\kartik\file\FileInput::class, $options)
             ->label(false);
         //DBG
         //dump(['attribute used' => $this->attribute]);
