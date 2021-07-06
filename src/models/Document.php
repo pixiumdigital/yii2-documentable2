@@ -273,6 +273,33 @@ class Document extends ActiveRecord
         return $docsvc->getObject($filename);
     }
 
+
+    /**
+     * save file linked to document to given path
+     * @param string $path
+     * @return bool false if the file couldn't be saved
+     */
+    public function saveObjectTo($path)
+    {
+        /** @var DocumentableComponent $docsvc */
+        $docsvc = \Yii::$app->documentable;
+
+        try {
+            if ($docsvc->usesS3) {
+                // get object from s3, save it to the given path
+                file_put_contents($path, $this->getObject());
+            // WIP:
+            } else {
+                $pathStored = "{$docsvc->fs_path}/{$this->url_master}";
+                copy($pathStored, $path);
+            }
+        } catch (Exception $e){
+            return false;
+        }
+        return true;
+    }
+
+
     /**
      * upload one file given by FS path to s3
      * also generates thumbnail if possible and required

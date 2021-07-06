@@ -158,32 +158,6 @@ class DocumentableBehavior extends Behavior
     }
 
     /**
-     * save file to given folder
-     * @param string $path
-     * @return bool false if the file couldn't be saved
-     */
-    public function saveObjectTo($path)
-    {
-        /** @var DocumentableComponent $docsvc */
-        $docsvc = \Yii::$app->documentable;
-
-        try {
-            if ($docsvc->usesS3) {
-                // get object from s3, save it to the given path
-                file_put_contents($path, $this->getObject());
-            // WIP:
-            } else {
-                $pathStored = "{$docsvc->fs_path}/{$this->url_master}";
-                copy($pathStored, $path);
-            }
-        } catch (Exception $e){
-            return false;
-        }
-        return true;
-    }
-
-
-    /**
      * Provided as a quick way to retrieve a doc
      * @param string $prop property name
      * @param array $options html options for img tag
