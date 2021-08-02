@@ -384,8 +384,8 @@ class Document extends ActiveRecord
             return $model;
         }
         $relModel = new $relClass();
-        $relClass->document_id = $model->id;
-        $relClass->{$relType."_id"} = $relId;
+        $relModel->document_id = $model->id;
+        $relModel->{$relType."_id"} = $relId;
         $relModel->save();
         
         // success through rel table, return document
