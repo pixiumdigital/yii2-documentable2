@@ -23,6 +23,7 @@ use yii\web\UploadedFile;
  *      'filter' => [
  *          'attribute1' => [ // the property name is the default tag
  *            'tag' => 'AVATAR',            // relation_type_tag in document (if not specified `attribute1` will be used)
+ *            'rel_classname' => User::class, // class to use as a via rel
  *            'multiple' =>  false,         // true, false accept multiple uploads
  *            'replace' => false,           // force replace of existing images
  *            'thumbnail' => false,         // create thumbnails for images
@@ -148,13 +149,12 @@ class DocumentableBehavior extends Behavior
     public function getDocs($prop = null)
     {
         $model = $this->owner;
-        $relTypeTag = $this->filter[$prop]['tag'] ?? $prop ?? null;
-        return Document::find()
-            ->andWhere(['rel_table' => $model->tableName()])
-            ->andWhere(['rel_id' => $model->id])
-            ->andWhere(['rel_type_tag' => $relTypeTag])
-            ->orderBy(['rank' => SORT_ASC])
-        ;
+        $options = $this->filter[$prop] ?? [];
+        $relTypeTag = $options['tag'] ?? $prop ?? null;
+        // throw new Exception('table:'.$model->tableName()." - prop:{$prop} => {$relTypeTag}");
+        return Document::findDocsForModel($model, $options)
+            ->andFilterWhere(['rel_type_tag' => $relTypeTag])
+            ->orderBy(['rank' => SORT_ASC]);
     }
 
     /**

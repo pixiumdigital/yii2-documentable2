@@ -376,7 +376,19 @@ class Document extends ActiveRecord
             $err = empty($errors) ? 'unknown reason' : $errors[0][0];
             throw new yii\db\Exception("Couldn't Save `document` reason:{$err}");
         }
-        // success, return document id
+
+        // build via table relationship if given
+        $relClass = $options['rel_classname'] ?? false;
+        if (false == $relClass) {
+            // success, return document
+            return $model;
+        }
+        $relModel = new $relClass();
+        $relClass->document_id = $model->id;
+        $relClass->{$relType."_id"} = $relId;
+        $relModel->save();
+        
+        // success through rel table, return document
         return $model;
     }
 
@@ -499,4 +511,25 @@ class Document extends ActiveRecord
         $newDoc->save(false);
         return $newDoc;
     }
+
+
+    /**
+     * find documents via 
+     * 1. rel table (table) (fast) using rel_classname, or
+     * 2. via rel_table, rel_id
+     * @return ActiveQuery
+     */
+    public static function findDocsForModel($model, $options = []) 
+    {
+        $relClass = $options['rel_classname'] ?? false;
+        if (false == $relClass) {
+            return Document::find()
+            ->where(['rel_id' => $model->id])
+            ->andWhere(['rel_table' => $model->tableName()])
+            ->andFilterWhere(['rel_type_tag' => $options['tag'] ?? null]);
+        }
+        // use via rel table [document_id, <model>_id]
+        return $model->hasMany(Document::class, ['id' => 'document_id'])
+            ->viaTable($relClass::tableName(), ["{$model->tableName()}_id" => 'id']);
+    }    
 }//eo-class
