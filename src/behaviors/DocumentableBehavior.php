@@ -16,6 +16,8 @@ use yii\web\UploadedFile;
  * - table_name
  * - model_id and,
  * - rel_type_tag (this to be able to group documents for one model type think AVATAR_IMG, RESUME, BEST_PICS)
+ * or (lionel.aimerie@pixiumdigital (2021-08-03))
+ * - by a rel_classname defining a via table (e.g. `user_document`)
  *
  * add to Model
  *   [
@@ -151,11 +153,23 @@ class DocumentableBehavior extends Behavior
         $model = $this->owner;
         $options = $this->filter[$prop] ?? [];
         $relTypeTag = $options['tag'] ?? $prop ?? null;
-        // throw new Exception('table:'.$model->tableName()." - prop:{$prop} => {$relTypeTag}");
-        return Document::findDocsForModel($model, $options)
-            ->andFilterWhere(['rel_type_tag' => $relTypeTag])
+        // find documents via 
+        // 1. rel table (table) (fast) using rel_classname, or
+        // 2. via rel_table, rel_id
+        $relClass = $options['rel_classname'] ?? false;
+        // TODO: ensure model has property "{$model->tableName()}_id"
+        $query = (false == $relClass) 
+        ? Document::find()
+            ->where(['rel_id' => $model->id])
+            ->andWhere(['rel_table' => $model->tableName()]) 
+        : $model->hasMany(Document::class, ['id' => 'document_id'])
+            ->viaTable($relClass::tableName(), ["{$model->tableName()}_id" => 'id']);
+
+        return $query->andFilterWhere(['rel_type_tag' => $relTypeTag])
             ->orderBy(['rank' => SORT_ASC]);
-    }
+    }    
+
+
 
     /**
      * Provided as a quick way to retrieve a doc

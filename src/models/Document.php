@@ -91,14 +91,15 @@ class Document extends ActiveRecord
     }
 
     //=== ACCESSORS
-    // GET model linked to a document by
+    // GET model linked to this document
     /**
-     * @return string classna
+     * @return string classname 
      */
     public function getRelClassName()
     {
         $tablesplit = array_map('ucfirst', explode('_', $this->rel_table));
         $classname = implode('', $tablesplit);
+        // TODO: FIXME: works only for Yii2 advanced
         return "\\app\\models\\${classname}";
     }
 
@@ -108,6 +109,7 @@ class Document extends ActiveRecord
     public function getRelModel()
     {
         // return object
+        // TODO: upgrade through rel_classname for property explored
         return $this->hasOne($this->relClassName, ['id' => 'rel_id']);
     }
 
@@ -513,23 +515,4 @@ class Document extends ActiveRecord
     }
 
 
-    /**
-     * find documents via 
-     * 1. rel table (table) (fast) using rel_classname, or
-     * 2. via rel_table, rel_id
-     * @return ActiveQuery
-     */
-    public static function findDocsForModel($model, $options = []) 
-    {
-        $relClass = $options['rel_classname'] ?? false;
-        if (false == $relClass) {
-            return Document::find()
-            ->where(['rel_id' => $model->id])
-            ->andWhere(['rel_table' => $model->tableName()])
-            ->andFilterWhere(['rel_type_tag' => $options['tag'] ?? null]);
-        }
-        // use via rel table [document_id, <model>_id]
-        return $model->hasMany(Document::class, ['id' => 'document_id'])
-            ->viaTable($relClass::tableName(), ["{$model->tableName()}_id" => 'id']);
-    }    
 }//eo-class
