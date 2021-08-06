@@ -232,10 +232,13 @@ class DocumentableBehavior extends Behavior
             throw new DocumentableException(DocumentableException::DEXC_NOT_DOCUMENTABLE, 'Target object is not a Documentable');
         }
 
+        $options = $this->filter[$prop] ?? [];
+        $relClass = $options['rel_classname'] ?? false;
+
         $docs = $this->getDocs($prop)->all();
         foreach ($docs as $doc) {
             /** @var Document $doc */
-            $doc->copyToModel($model, $prop);
+            $doc->copyToModel($model, $prop, $relClass);
         }
     }
 

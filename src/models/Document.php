@@ -381,16 +381,11 @@ class Document extends ActiveRecord
 
         // build via table relationship if given
         $relClass = $options['rel_classname'] ?? false;
-        if (false == $relClass) {
-            // success, return document
-            return $model;
+        if ($relClass) {
+            $model->createRel($relClass);
         }
-        $relModel = new $relClass();
-        $relModel->document_id = $model->id;
-        $relModel->{$relType."_id"} = $relId;
-        $relModel->save();
         
-        // success through rel table, return document
+        // return document
         return $model;
     }
 
@@ -495,8 +490,9 @@ class Document extends ActiveRecord
      * it only creates a new Document and specifies a copy_group for all Documents pointing to the same real file
      * @param ActiveRecord $model
      * @param String $tag name
+     * @param String $relClass name (false if not defined)
      */
-    public function copyToModel($model, $tag = null)
+    public function copyToModel($model, $tag = null, $relClass = false)
     {
         // if this is not a copied model, create a copy group
         if (null == $this->copy_group) {
@@ -511,7 +507,25 @@ class Document extends ActiveRecord
         $newDoc->isNewRecord = true; // assign a new
         $newDoc->copy_group = $this->copy_group; // copy the group
         $newDoc->save(false);
+        if ($relClass) {
+            $newDoc->createRel($relClass);
+        }
         return $newDoc;
+    }
+
+    /** 
+     * create record in rel_table defined by rel_classnmame, relType and role_id
+     * to the current document
+     * @param string $relClass 
+     * @param string $relType (default = rel_table from current model)
+     * @param int $relId (default = rel id from current model)
+     */
+    private function createRel($relClass, $relType = null, $relId = null) {
+        $relModel = new $relClass();
+        $relModel->document_id = $this->id;
+        $column = ($relType ?? $this->rel_table)."_id";
+        $relModel->{$column} = $relId ?? $this->rel_id;
+        $relModel->save();
     }
 
 
