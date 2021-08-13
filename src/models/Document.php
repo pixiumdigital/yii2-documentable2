@@ -12,6 +12,7 @@ use Yii;
 use \yii\imagine\Image;
 use \yii\helpers\FileHelper;
 use \yii\db\ActiveRecord;
+use yii\helpers\ArrayHelper;
 use yii\web\UploadedFile;
 
 // use yii]imagine\
@@ -404,6 +405,16 @@ class Document extends ActiveRecord
     {
         /** @var DocumentableComponent $docsvc */
         $docsvc = \Yii::$app->documentable;
+
+        // merge options defined on model for tag and given options
+        $tagOptions = $model->filter[$tag] ?? [];
+        $options = ArrayHelper::merge($tagOptions, $options);
+
+        // erase previous docs if required
+        if ($options['replace'] ?? false && $model->hasMethod('deleteDocs')) {
+            $model->deleteDocs($tag);
+        }
+
 
         $path = null;
         $mimetype = null;
