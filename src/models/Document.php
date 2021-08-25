@@ -400,6 +400,7 @@ class Document extends ActiveRecord
      * @param ActiveRecord $model
      * @param string $tag // relation_tag
      * @param array $options
+     * @return Document
      */
     public static function uploadFileForModel($file, $model, $tag, $options = [])
     {
@@ -439,7 +440,8 @@ class Document extends ActiveRecord
         if ((false === $unzip) || !in_array($file->type, $acceptedZipTypes)) {
             // simple single file
             // not a zip
-            self::_uploadFile(
+            // return it
+            return self::_uploadFile(
                 $path,
                 $mimetype,
                 $model->id,
@@ -447,7 +449,6 @@ class Document extends ActiveRecord
                 $tag,
                 $options
             );
-            return;
         }
 
         // unzip and if unzip is an array, use the array to filter the mimetypes to extract
@@ -493,6 +494,7 @@ class Document extends ActiveRecord
         // delete zip file
         // as it won't be done after upload by _uploadFile
         FileHelper::unlink($path);
+        return null;
     }
 
     /**
