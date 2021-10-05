@@ -385,7 +385,8 @@ class DocumentableComponent extends Component
             return $result['Body'] ?? null;
         }
         // USE FS
-        return file_get_contents($filename);
+        $path = "{$this->fs_path}/{$filename}";
+        return file_get_contents($path);
     }
 
     /**
