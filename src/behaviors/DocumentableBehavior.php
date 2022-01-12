@@ -134,7 +134,8 @@ class DocumentableBehavior extends Behavior
     public function afterDelete()
     {
         $model = $this->owner;
-        $docs = Document::findAll(['rel_table' => $model->tableName(), 'rel_id' => $model->id]);
+        $tableName = $model->getDb()->quoteTableName($model->tableName());
+        $docs = Document::findAll(['rel_table' => $tableName, 'rel_id' => $model->id]);
         foreach ($docs as $doc) {
             // DocumentRel->delete() cascades delete to Document.
             $doc->delete();
@@ -157,13 +158,15 @@ class DocumentableBehavior extends Behavior
         // 1. rel table (table) (fast) using rel_classname, or
         // 2. via rel_table, rel_id
         $relClass = $options['rel_classname'] ?? false;
-        // TODO: ensure model has property "{$model->tableName()}_id"
+        $tableName = $model->getDb()->quoteTableName($model->tableName());
+
+        // TODO: ensure model has property "{$tableName}_id"
         $query = (false == $relClass) 
         ? Document::find()
             ->where(['rel_id' => $model->id])
-            ->andWhere(['rel_table' => $model->tableName()]) 
+            ->andWhere(['rel_table' => $tableName]) 
         : $model->hasMany(Document::class, ['id' => 'document_id'])
-            ->viaTable($relClass::tableName(), ["{$model->tableName()}_id" => 'id']);
+            ->viaTable($relClass::tableName(), ["{$tableName}_id" => 'id']);
 
         return $query->andFilterWhere(['rel_type_tag' => $relTypeTag])
             ->orderBy(['rank' => SORT_ASC]);

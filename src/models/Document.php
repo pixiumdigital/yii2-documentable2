@@ -416,6 +416,8 @@ class Document extends ActiveRecord
             $model->deleteDocs($tag);
         }
 
+        $tableName = $model->getDb()->quoteTableName($model->tableName());
+
 
         $path = null;
         $mimetype = null;
@@ -445,7 +447,7 @@ class Document extends ActiveRecord
                 $path,
                 $mimetype,
                 $model->id,
-                $model->tableName(),
+                $tableName,
                 $tag,
                 $options
             );
@@ -482,7 +484,7 @@ class Document extends ActiveRecord
                     $filepath,
                     $mimetype,
                     $model->id,
-                    $model->tableName(),
+                    $tableName,
                     $tag,
                     $options // options
                 );
@@ -512,9 +514,11 @@ class Document extends ActiveRecord
             $this->copy_group = $this->id;
             $this->save(false);
         }
+        $tableName = $model->getDb()->quoteTableName($model->tableName());
+
         $newDoc = clone $this;
         $newDoc->rel_type_tag = $tag ?? $this->rel_type_tag; // reuse original tag if not specified
-        $newDoc->rel_table = $model->tableName();
+        $newDoc->rel_table = $tableName;
         $newDoc->rel_id = $model->id;
         $newDoc->id = null;
         $newDoc->isNewRecord = true; // assign a new
