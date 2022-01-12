@@ -146,7 +146,7 @@ class DocumentableBehavior extends Behavior
      * return unquoted {{%tablename}}
      * @return string
      */
-    protected function unquotedTableName() {
+    public function unquotedTableName() {
         $model = $this->owner;
         return preg_replace('/\`/', '', $model->getDb()->quoteSql($model->tableName()));
     }
