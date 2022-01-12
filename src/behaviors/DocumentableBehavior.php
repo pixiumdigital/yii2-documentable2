@@ -134,13 +134,23 @@ class DocumentableBehavior extends Behavior
     public function afterDelete()
     {
         $model = $this->owner;
-        $tableName = $model->getDb()->quoteTableName($model->tableName());
+        $tableName = $this->unquotedTableName();
         $docs = Document::findAll(['rel_table' => $tableName, 'rel_id' => $model->id]);
         foreach ($docs as $doc) {
             // DocumentRel->delete() cascades delete to Document.
             $doc->delete();
         }
     }
+
+    /**
+     * return unquoted {{%tablename}}
+     * @return string
+     */
+    protected function unquotedTableName() {
+        $model = $this->owner;
+        return preg_replace('/\`/', '', $model->getDb()->quoteSql($model->tableName()));
+    }
+
 
     //=== ACCESSORS
     /**
@@ -158,7 +168,7 @@ class DocumentableBehavior extends Behavior
         // 1. rel table (table) (fast) using rel_classname, or
         // 2. via rel_table, rel_id
         $relClass = $options['rel_classname'] ?? false;
-        $tableName = $model->getDb()->quoteTableName($model->tableName());
+        $tableName = $this->unquotedTableName();
 
         // TODO: ensure model has property "{$tableName}_id"
         $query = (false == $relClass) 
