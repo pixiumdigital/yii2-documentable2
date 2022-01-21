@@ -13,10 +13,11 @@ class m202001_000004_fix_rel_table_in_document extends Migration
     public function safeUp()
     {
         $connection = $this->getDb();
-
-        $connection->createCommand('
-            UPDATE `document` SET rel_table = REGEXP_REPLACE(rel_table, "[\{\}\%]", "");
-        ')->execute();
+        if ('mysql' == $connection->getDriverName()) {
+            $connection->createCommand('
+                UPDATE `document` SET rel_table = REGEXP_REPLACE(rel_table, "[\{\}\%]", "");
+            ')->execute();
+        }
     }
 
     /**
