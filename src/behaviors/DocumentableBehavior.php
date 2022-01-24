@@ -89,12 +89,12 @@ class DocumentableBehavior extends Behavior
      */
     public function afterSave($event)
     {
-        $model = $this->owner;
         foreach ($this->filter as $prop => $options) {
             if (!$this->owner->hasProperty($prop)) {
                 continue;
             }
-
+            
+            $model = $this->owner;
             // for each prop get file(s), upload it(them)
             // do it here not in the controllers.... simplifies the flow
             $files = \yii\web\UploadedFile::getInstances($model, $prop);
@@ -124,6 +124,8 @@ class DocumentableBehavior extends Behavior
                     break;
                 }
             }
+            // reset file property on owner
+            $this->owner->{$prop} = null;
         }
     }
 
