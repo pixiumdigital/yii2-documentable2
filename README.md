@@ -6,7 +6,7 @@
 
 - Release v1.x
   Now Documentable is setup as a component. The params logic moves to the component and the plugins looks automatically for an `aws` component. If not present, it will use FS.
-
+- v1.1.8 - fix a bug with model->save() called twice. afterSave now resets the file form field.
 
 
 ## Add to Composer
