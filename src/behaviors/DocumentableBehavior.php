@@ -125,7 +125,7 @@ class DocumentableBehavior extends Behavior
                 }
             }
             // reset file property on owner
-            $this->owner->{$prop} = null;
+            // $this->owner->{$prop} = null;
         }
     }
 
