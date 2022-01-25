@@ -1,6 +1,7 @@
 <?php
 namespace pixium\documentable\behaviors;
 
+use Exception;
 use pixium\documentable\DocumentableException;
 use \yii\db\ActiveRecord;
 use \yii\base\Behavior;
@@ -82,6 +83,7 @@ class DocumentableBehavior extends Behavior
         ];
     }
 
+
     /**
      * after the model has been saved, attach documents based
      * on properties passed (not attributes)
@@ -94,7 +96,19 @@ class DocumentableBehavior extends Behavior
                 continue;
             }
             
+            /** @var ActiveRecord $model */
             $model = $this->owner;
+            // avoid double loading files
+            // if ($model->{$prop} === true) {
+            //     continue;
+            // } 
+            // $model->documentable_inserts[$prop] = true;
+
+            // avoid multiple attempts to save the same file
+            // if (!($model->{$prop} instanceof UploadedFile)) {
+            //     continue;
+            // }
+
             // for each prop get file(s), upload it(them)
             // do it here not in the controllers.... simplifies the flow
             $files = \yii\web\UploadedFile::getInstances($model, $prop);
@@ -102,30 +116,43 @@ class DocumentableBehavior extends Behavior
 
             // process this property
             $multiple = $options['multiple'] ?? false;
-            if (!$multiple && !empty($files)) {
-                // for unique attachments, clear Documents of given tag first
-                // clear only if new documents are given (think of the update scenario)
-                $this->deleteDocs($prop);
-                // Document::deleteForModel($model, $options);
-            }
+            // if (!$multiple && !empty($files)) {
+            //     // for unique attachments, clear Documents of given tag first
+            //     // clear only if new documents are given (think of the update scenario)
+            //     $this->deleteDocs($prop);
+            //     // Document::deleteForModel($model, $options);
+            // }
 
             if (!is_array($files)) {
                 throw new \yii\base\UserException('DocumentableBehavior afterSave expects an array of files');
             }
-            foreach ($files as $file) {
-                Document::uploadFileForModel(
-                    $file,
-                    $model,
-                    $options['tag'] ?? $prop,
-                    $options
-                );
-                if (!$multiple) {
-                    // handles the case multiple files where given but only one is required by the model
-                    break;
+            $exisitingDocIds = $this->getDocs($prop)->select('id')->asArray()->column();
+            $this->owner->{$prop} = $this->getDocs($prop)->all();
+            try {
+                foreach ($files as $file) {
+                    Document::uploadFileForModel(
+                        $file,
+                        $model,
+                        $options['tag'] ?? $prop,
+                        $options
+                    );
+                    if (!$multiple) {
+                        // handles the case multiple files where given but only one is required by the model
+                        break;
+                    }
                 }
+                // all went well, delete old docs
+                if (!$multiple && !empty($files)) {
+                    Document::deleteAll(['id' => $exisitingDocIds]);
+                }
+            } catch(Exception $e) {
+                // DBG: throw $e;
+                return false;
             }
-            // reset file property on owner
-            // $this->owner->{$prop} = null;
+            return true;
+            // reset file property on owner [ERROR]
+            // $this->owner->{$prop} = $this->getDocs($prop)->all();
+            
         }
     }
 
