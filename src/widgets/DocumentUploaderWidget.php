@@ -10,8 +10,7 @@ use yii\widgets\InputWidget;
 // use yii\helpers\Html;
 // use yii\helpers\Json;
 
-class DocumentUploaderWidget extends InputWidget
-{
+class DocumentUploaderWidget extends InputWidget {
     /**
      * mimetype to allow
      */
@@ -93,8 +92,7 @@ class DocumentUploaderWidget extends InputWidget
     /**
      * @inheritdoc
      */
-    public function init()
-    {
+    public function init() {
         // get params (init options)
         $this->pluginEvents = [
             'fileclear' => new \yii\web\JsExpression('function() { console.log("fileclear"); }'),
@@ -106,8 +104,7 @@ class DocumentUploaderWidget extends InputWidget
     /**
      * @inheritdoc
      */
-    public function run()
-    {
+    public function run() {
         // register assets
         DocumentUploaderAsset::register($this->getView());
 
@@ -120,11 +117,11 @@ class DocumentUploaderWidget extends InputWidget
         }
         $model = $this->model;
         if (!$model->hasMethod('getDocs')) {
-            throw new Exception(get_class($model).' needs to implement DocumentableBehavior');
+            throw new Exception(get_class($model) . ' needs to implement DocumentableBehavior');
         }
         // attached file should be defined as a property
         if (!($model->hasAttribute($this->attribute) || $model->hasProperty($this->attribute))) {
-            throw new Exception(get_class($model)." has no [{$this->attribute}] attribute");
+            throw new Exception(get_class($model) . " has no [{$this->attribute}] attribute");
         }
         $form = $this->field->form;
         // set filters
@@ -133,7 +130,7 @@ class DocumentUploaderWidget extends InputWidget
         $overwriteFilesOnAdd = $this->replace ?? (!$acceptMultipleFiles || ($model->filter[$this->attribute]['replace'] ?? false));
         // mimiTypes accepted, file extensions accepted
         $allowedMimetypes = $this->mimetypes ?? $model->filter[$this->attribute]['mimetypes'] ?? false;
-        $maxFileSize = $allowedMimetypes = $this->maxFileSize ?? $model->filter[$this->attribute]['maxsize'] ?? Yii::$app->params['upload_max_size'] ?? 10;
+        $maxFileSize = $this->maxFileSize ?? $model->filter[$this->attribute]['maxsize'] ?? Yii::$app->params['upload_max_size'] ?? 10;
         $allowedFileExtensions = $this->allowedFileExtensions ?? $model->filter[$this->attribute]['extensions'] ?? false;
         // prepare widget's initial state
         $existingDocUrls = [];
@@ -190,7 +187,7 @@ class DocumentUploaderWidget extends InputWidget
                 'maxFileSize' => $maxFileSize, // Kb add to params
                 // delete
                 'deleteUrl' => \yii\helpers\Url::to(['document/delete']),
-                'theme' => $this->theme, 
+                'theme' => $this->theme,
             ]),
             // events
             'pluginEvents' => $this->pluginEvents
@@ -205,12 +202,17 @@ class DocumentUploaderWidget extends InputWidget
         }
 
         // Render Widget (accept multiple widgets)
-        echo $form->field($model, "{$this->attribute}[]"
-        // .($acceptMultipleFiles ? '[]' : '') // always return an array of files
-        , [
-            // 'fieldConfig' => ['template' ]
-            'template' => $this->template,
-            'options' => ['class' => $formFieldClasses]])
+        echo $form->field(
+            $model,
+            "{$this->attribute}[]"
+            // .($acceptMultipleFiles ? '[]' : '') // always return an array of files
+            ,
+            [
+                // 'fieldConfig' => ['template' ]
+                'template' => $this->template,
+                'options' => ['class' => $formFieldClasses]
+            ]
+        )
             ->widget(\kartik\file\FileInput::class, $options)
             ->label(false);
         //DBG
