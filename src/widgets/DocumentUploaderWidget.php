@@ -135,7 +135,8 @@ class DocumentUploaderWidget extends InputWidget {
         // prepare widget's initial state
         $existingDocUrls = [];
         $existingDocConfigs = [];
-        $docs = $model->getDocs($this->attribute)->all(); // get docs for given property
+        $docQuery = $model->getDocs($this->attribute); // Null handling
+        $docs = is_null($docQuery) ? [] : $$docQuery->all(); // get docs for given property
         // prepare configuration for
         foreach ($docs as $doc) {
             array_push($existingDocUrls, $doc->getURI());
