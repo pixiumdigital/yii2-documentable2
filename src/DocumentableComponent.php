@@ -47,7 +47,8 @@ use yii\helpers\VarDumper;
  *                  'crop' => true (crop will fit the smaller edge in the defined box)
  *                  'background_color' => '000',
  *                  'background_alpha' => 0,
- *              ]
+ *              ],
+ *              'image_process' => [ 'regex' => callback($image) {} ]
  *          ],
  *       ]
  *   ],
@@ -208,6 +209,17 @@ class DocumentableComponent extends Component
             }
         } catch (Exception $e) {
             // simply don't reorientate
+        }
+
+        // Processing filters on images
+        if ($process_list = ($options['process_image'] ?? false)) {
+            //  process list of regex
+            foreach($process_list as $regex => $callback) {
+                if (preg_match($regex, $path, $matches)) {
+                    // image is passed by reference
+                    $callback($image);
+                }
+            }
         }
 
         // save image to $filePath
