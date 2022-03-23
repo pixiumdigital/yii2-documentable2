@@ -211,20 +211,20 @@ class Document extends ActiveRecord
             'rank_from' => $iFrom
         ];
         $tn = self::tableName();
-        // guarantee we stay under 0
-        $sql = "UPDATE `{$tn}` SET `rank`=GREATEST(0, `rank`{$op}1)"
-            .' WHERE `rel_table`=:rel_table AND `rel_id`=:rel_id'
-            .' AND `rank` IS NOT NULL AND `rank`>=:rank_from';
+        $sql = 'UPDATE {{'.$tn.'}} SET [[rank]]=GREATEST(0, [[rank]]'.$op.'1)'
+            .' WHERE [[rel_table]]=:rel_table AND [[rel_id]]=:rel_id'
+            .' AND [[rank]] IS NOT NULL AND [[rank]]>=:rank_from';
+
         // extra filters
         if ($iTo !== null) {
             // add filter to rank iTo  (<= note!)
             $paramsBound['rank_to'] = $iTo;
-            $sql .= ' AND `rank`<=:rank_to';
+            $sql .= ' AND [[rank]]<=:rank_to';
         }
         if ($this->rel_type_tag != null) {
             // to do it yii style and protect params
             $paramsBound['rel_type_tag'] = $this->rel_type_tag;
-            $sql .= ' AND `rel_type_tag`=:rel_type_tag';
+            $sql .= ' AND [[rel_type_tag]]=:rel_type_tag';
         }
         \Yii::$app->db->createCommand($sql, $paramsBound)->execute();
 
