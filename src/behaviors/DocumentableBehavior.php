@@ -112,6 +112,11 @@ class DocumentableBehavior extends Behavior
             // for each prop get file(s), upload it(them)
             // do it here not in the controllers.... simplifies the flow
             $files = \yii\web\UploadedFile::getInstances($model, $prop);
+            // skip (in case of multiple filters attached to the behaviour)
+            if (empty($files)) {
+                continue;
+            }
+
             $model->{$prop} = $files;
 
             // process this property
